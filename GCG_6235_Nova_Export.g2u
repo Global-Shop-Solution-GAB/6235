@@ -1,0 +1,220 @@
+Program.Sub.ScreenSU.Start
+Gui.Form_PY_Export..Create
+Gui.Form_PY_Export..Caption("NOVA Time Export")
+Gui.Form_PY_Export..Size(6645,2010)
+Gui.Form_PY_Export..MinX(0)
+Gui.Form_PY_Export..MinY(0)
+Gui.Form_PY_Export..Position(0,0)
+Gui.Form_PY_Export..BackColor(-2147483633)
+Gui.Form_PY_Export..MousePointer(0)
+Gui.Form_PY_Export..Event(UnLoad,Form_PY_Export_UnLoad)
+Gui.Form_PY_Export.lblBegDate.Create(Label,"Beginning Date",True,1935,255,0,180,195,True,0,"Arial",8,-2147483633,0)
+Gui.Form_PY_Export.dtpBegDate.Create(DatePicker)
+Gui.Form_PY_Export.dtpBegDate.Size(1935,285)
+Gui.Form_PY_Export.dtpBegDate.Position(180,420)
+Gui.Form_PY_Export.lblEndDate.Create(Label,"Ending Date",True,1935,255,0,2910,195,True,0,"Arial",8,-2147483633,0)
+Gui.Form_PY_Export.dtpEndDate.Create(DatePicker)
+Gui.Form_PY_Export.dtpEndDate.Size(1935,285)
+Gui.Form_PY_Export.dtpEndDate.Position(2910,420)
+Gui.Form_PY_Export.cmdExport.Create(Button)
+Gui.Form_PY_Export.cmdExport.Size(1095,375)
+Gui.Form_PY_Export.cmdExport.Position(180,990)
+Gui.Form_PY_Export.cmdExport.Caption("Export")
+Gui.Form_PY_Export.cmdExport.Event(Click,cmdExport_Click)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+V.Global.sFileLocation.Declare(String,"")
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+F.Intrinsic.Control.SetErrorHandler("Main_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String,"")
+
+'creating custom dir that the payroll export file will be saved to
+F.Intrinsic.Control.CallSub(Create_Dir)
+
+Gui.Form_PY_Export..Show
+Gui.Form_PY_Export..AlwaysOnTop(True)
+Gui.Form_PY_Export..AlwaysOnTop(False)
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Main_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	F.Intrinsic.String.Build("Project: GCG_6235_Nova_Export.g2u {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.NewLine,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(Form_PY_Export_UnLoad)
+Function.Intrinsic.Control.EndIf
+Program.Sub.Main.End
+
+Program.Sub.cmdExport_Click.Start
+F.Intrinsic.Control.SetErrorHandler("cmdExport_Click_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String,"")
+V.Local.dStart.Declare(Date)
+V.Local.dEnd.Declare(Date)
+V.Local.sSql.Declare(String,"")
+V.Local.sYear.Declare(String,"")
+V.Local.sDateTime.Declare(String,"")
+V.Local.sTemp.Declare(String,"")
+V.Local.sData.Declare(String,"")
+V.Local.sFile.Declare(String,"")
+V.Local.i.Declare(Long,0)
+V.Local.sDate.Declare(String,"")
+V.Local.sCode.Declare(String,"")
+V.Local.sFilter.Declare(String,"")
+V.Local.sReg.Declare(String,"")
+
+Gui.Form_PY_Export..Visible(False)
+
+F.Intrinsic.UI.InvokeWaitDialog("Getting Payroll Data.....................")
+
+'setting dates from dp to variables
+V.Local.dStart.Set(V.Screen.Form_PY_Export!dtpBegDate.Value)
+V.Local.dEnd.Set(V.Screen.Form_PY_Export!dtpEndDate.Value)
+
+F.ODBC.Connection!Con.OpenCompanyConnection
+
+'getting selected year
+F.Intrinsic.String.Format(V.Local.dStart,"YYYY",V.Local.sYear)
+
+'getting gss earning codes
+F.Intrinsic.String.Build("Select Pay_Category, rtrim(Descr) as Descr, '' as Code, Pay_Type, Incl_In_Ot_Ind From V_Payroll_pay_cats where year = '{0}' and Descr <> ''",V.Local.sYear,V.Local.sSql)
+F.Data.DataTable.CreateFromSQL("ERNCODE","con",V.Local.sSql,True)
+
+F.Data.DataView.Create("ERNCODE","VTemp",22,"Descr Like 'REG*'","")
+
+F.Intrinsic.Control.If(V.DataView.ERNCODE!VTemp.RowCount--,<>,-1)
+	V.Local.sReg.Set(V.DataView.ERNCODE!VTemp(V.DataView.ERNCODE!VTemp.RowCount--).Descr!fieldValTrim)
+F.Intrinsic.Control.EndIf
+
+F.Data.DataView.Close("ERNCODE","VTemp")
+
+'building file name
+F.Intrinsic.String.Format(V.Ambient.Now,"MMDDYY_HhNnSs",V.Local.sDateTime)
+F.Intrinsic.String.Build("{0}NOVAtimeExport_{1}.csv",V.Global.sFileLocation,V.Local.sDateTime,V.Local.sFile)
+
+F.Intrinsic.String.Build("Select Date_In, Employee, Earnings_Code, Time_In, Time_Out From V_TIME_ATTENDANCE Where Date_In Between '{0}' and '{1}' Order by Date_In, Employee",v.Local.dStart.PervasiveDate,V.Local.dEnd.PervasiveDate,V.Local.sSql)
+
+F.Data.DataTable.CreateFromSQL("Time","con",V.Local.sSql,True)
+
+F.Intrinsic.Control.For(V.Local.i,0,V.DataTable.Time.RowCount--,1)
+	F.Intrinsic.String.Format(V.DataTable.Time(V.Local.i).Date_In!FieldVal,"MM/DD/YYYY",V.Local.sDate)
+	F.Intrinsic.String.Build("Pay_Category = {0}",V.DataTable.Time(V.Local.i).Earnings_Code!FieldValLong,V.Local.sFilter)
+	F.Data.DataView.Create("ERNCODE","VTemp",22,V.Local.sFilter,"")
+	F.Intrinsic.Control.If(V.DataView.ERNCODE!VTemp.RowCount--,<>,-1)
+		V.Local.sCode.Set(V.DataView.ERNCODE!VTemp(V.DataView.ERNCODE!VTemp.RowCount--).Descr!fieldValTrim)
+	F.Intrinsic.Control.Else
+		V.Local.sCode.Set(V.Local.sReg)
+	F.Intrinsic.Control.EndIf
+	F.Data.DataView.Close("ERNCODE","VTemp")
+	F.Intrinsic.Control.If(V.Local.i,=,0)
+		F.Intrinsic.String.Build("{0},{1},{2},{3},{4}",V.Local.sDate,V.DataTable.Time(V.Local.i).Employee!FieldValTrim,V.Local.sCode,V.DataTable.Time(V.Local.i).Time_In!FieldVal,V.DataTable.Time(V.Local.i).Time_Out!FieldVal,V.Local.sData)
+	F.Intrinsic.Control.Else
+		F.Intrinsic.String.Build("{0}{1}{2},{3},{4},{5},{6}",V.Local.sData,V.Ambient.NewLine,V.Local.sDate,V.DataTable.Time(V.Local.i).Employee!FieldValTrim,V.Local.sCode,V.DataTable.Time(V.Local.i).Time_In!FieldVal,V.DataTable.Time(V.Local.i).Time_Out!FieldVal,V.Local.sData)
+	F.Intrinsic.Control.EndIf
+F.Intrinsic.Control.Next(V.Local.i)
+
+F.Intrinsic.Control.If(V.DataTable.Time.RowCount--,<>,-1)
+	F.Intrinsic.String.Build("NOVAtimeExport_{0}.csv",V.Local.sDateTime,V.Local.sTemp)
+	F.Intrinsic.UI.ShowSaveFileDialog(V.Local.sTemp,8,V.Local.sTemp)
+	
+	F.Intrinsic.Control.If(V.Local.sTemp,<>,"***CANCEL***")
+		F.Intrinsic.File.String2File(V.Local.sTemp,V.Local.sData)
+		F.Intrinsic.String.Split(V.Local.sTemp,"\",V.Local.sTemp)
+		F.Intrinsic.Control.For(V.Local.i,0,V.Local.sTemp.UBound)
+			F.Intrinsic.Control.If(V.Local.i,<,V.Local.sTemp.UBound)
+				F.Intrinsic.Control.If(V.Local.i,=,0)
+					F.Intrinsic.String.Build("{0}\",V.Local.sTemp(V.Local.i),V.Local.sTemp)
+				F.Intrinsic.Control.Else
+					F.Intrinsic.String.Build("{0}{1}\",V.Local.sTemp,V.Local.sTemp(V.Local.i),V.Local.sTemp)
+				F.Intrinsic.Control.EndIf
+			F.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.Next(V.Local.i)
+		F.Intrinsic.Task.ShellExec(V.Caller.Handle,"",V.Local.sTemp,"","",1)
+	F.Intrinsic.Control.Else
+		F.Intrinsic.File.String2File(V.Local.sFile,V.Local.sData)
+		F.Intrinsic.Task.ShellExec(V.Caller.Handle,"",V.Global.sFileLocation,"","",1)
+	F.Intrinsic.Control.EndIf
+	F.Data.DataTable.Close("Time")
+	F.Intrinsic.Control.CallSub(Form_PY_Export_UnLoad)
+F.Intrinsic.Control.Else
+	F.Intrinsic.UI.Msgbox("No Time and Attendance Records for selected dates.........")
+	F.Data.DataTable.Close("Time")
+	Gui.Form_PY_Export..Show
+	Gui.Form_PY_Export..AlwaysOnTop(True)
+	Gui.Form_PY_Export..AlwaysOnTop(False)
+F.Intrinsic.Control.EndIf
+
+F.ODBC.Connection!Con.Close
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("cmdExport_Click_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	F.Intrinsic.String.Build("Project: GCG_6235_Nova_Export.g2u {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.NewLine,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(Form_PY_Export_UnLoad)
+Function.Intrinsic.Control.EndIf
+Program.Sub.cmdExport_Click.End
+
+Program.Sub.Form_PY_Export_UnLoad.Start
+F.Intrinsic.Control.SetErrorHandler("Form_PY_Export_UnLoad_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String,"")
+
+F.Intrinsic.Control.If(V.ODBC.Con.State,=,1)
+	F.ODBC.Connection!Con.Close
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.End
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Form_PY_Export_UnLoad_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	F.Intrinsic.Control.End
+Function.Intrinsic.Control.EndIf
+Program.Sub.Form_PY_Export_UnLoad.End
+
+Program.Sub.Create_Dir.Start
+F.Intrinsic.Control.SetErrorHandler("Create_Dir_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String,"")
+V.Local.bRet.Declare(Boolean,False)
+
+F.Intrinsic.Control.If(V.Caller.GlobalDir.Right1,=,"\")
+	F.Intrinsic.String.Build("{0}Custom\",V.Caller.GlobalDir,V.Global.sFileLocation)
+F.Intrinsic.Control.Else
+	F.Intrinsic.String.Build("{0}\Custom\",V.Caller.GlobalDir,V.Global.sFileLocation)
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.File.DirExists(V.Global.sFileLocation,V.Local.bRet)
+
+F.Intrinsic.Control.If(V.Local.bRet,=,False)
+	F.Intrinsic.File.CreateDir(V.Global.sFileLocation)
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.String.Build("{0}6235\",V.Global.sFileLocation,V.Global.sFileLocation)
+
+F.Intrinsic.File.DirExists(V.Global.sFileLocation,V.Local.bRet)
+
+F.Intrinsic.Control.If(V.Local.bRet,=,False)
+	F.Intrinsic.File.CreateDir(V.Global.sFileLocation)
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Create_Dir_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	F.Intrinsic.String.Build("Project: GCG_6235_Nova_Export.g2u {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.NewLine,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(Form_PY_Export_UnLoad)
+Function.Intrinsic.Control.EndIf
+Program.Sub.Create_Dir.End
